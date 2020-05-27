@@ -18,9 +18,7 @@ import { debounce } from '../utils/debounce';
 export default class WebGLView {
   constructor(app) {
     this.app = app;
-    this.PARAMS = {
-      rotSpeed: 0.005
-    };
+
 
     this.init();
   }
@@ -30,14 +28,18 @@ export default class WebGLView {
     this.initBgScene();
     this.initLights();
     this.initTweakPane();
-    await this.loadTestMesh();
+    // await this.loadTestMesh();
     this.setupTextCanvas();
     this.initMouseMoveListen();
     this.initMouseCanvas();
     this.initRenderTri();
     this.initPostProcessing();
     this.initResizeHandler();
+
+    this.initStuff();
   }
+
+
 
   initResizeHandler() {
     window.addEventListener(
@@ -100,14 +102,60 @@ export default class WebGLView {
   }
 
   initTweakPane() {
+    this.PARAMS = {
+      rotation: 0.0,
+      lineWidth: 0.3,
+      repeat: 2,
+      timeMulti: 0.005,
+      noiseAtten: 1.0
+    };
+
     this.pane = new Tweakpane();
 
     this.pane
-      .addInput(this.PARAMS, 'rotSpeed', {
+      .addInput(this.PARAMS, 'rotation', {
+        min: 0.0,
+        max: 6.0
+      })
+      .on('change', value => {
+        this.planeMat.uniforms.rotation.value = value;
+      });
+
+    this.pane
+      .addInput(this.PARAMS, 'lineWidth', {
+        min: 0.0,
+        max: Math.PI
+      })
+      .on('change', value => {
+        this.planeMat.uniforms.lineWidth.value = value;
+      });
+
+    this.pane
+      .addInput(this.PARAMS, 'repeat', {
+        min: 0.0,
+        max: 100
+      })
+      .on('change', value => {
+        this.planeMat.uniforms.repeat.value = value;
+      });
+
+    this.pane
+      .addInput(this.PARAMS, 'timeMulti', {
         min: 0.0,
         max: 0.5
       })
-      .on('change', value => { });
+      .on('change', value => {
+        this.planeMat.uniforms.timeMulti.value = value;
+      });
+
+    this.pane
+      .addInput(this.PARAMS, 'noiseAtten', {
+        min: 0.0,
+        max: 10.0
+      })
+      .on('change', value => {
+        this.planeMat.uniforms.noiseAtten.value = value;
+      });
   }
 
   initMouseCanvas() {
@@ -115,13 +163,14 @@ export default class WebGLView {
   }
 
   initMouseMoveListen() {
-    this.mouse = new THREE.Vector2();
+    this.mouse = new THREE.Vector2(0, 0);
+    this.mouseTarget = new THREE.Vector2(0, 0);
     this.width = window.innerWidth;
     this.height = window.innerHeight;
 
-    window.addEventListener('mousemove', ({ clientX, clientY }) => {
-      this.mouse.x = clientX; //(clientX / this.width) * 2 - 1;
-      this.mouse.y = clientY; //-(clientY / this.height) * 2 + 1;
+    window.addEventListener('mousemove', ({ pageX, pageY }) => {
+      this.mouse.x = 2 * (pageX / this.width - 0.5);
+      this.mouse.y = 2 * (pageY / this.height - 0.5);
 
       this.mouseCanvas.addTouch(this.mouse);
     });
@@ -140,6 +189,55 @@ export default class WebGLView {
 
   setupTextCanvas() {
     this.textCanvas = new TextCanvas(this);
+  }
+
+  initStuff() {
+    this.planeMat = new THREE.ShaderMaterial({
+      extensions: {
+        derivatives: '#extension GL_OES_standard_derivatives : enable',
+      },
+      fragmentShader: glslify(baseDiffuseFrag),
+      vertexShader: glslify(basicDiffuseVert),
+      uniforms: {
+        u_time: {
+          value: 0.0
+        },
+        u_lightColor: {
+          value: new THREE.Vector3(0.0, 1.0, 1.0)
+        },
+        u_lightPos: {
+          value: new THREE.Vector3(-2.2, 2.0, 2.0)
+        },
+        resolution: {
+          value: new THREE.Vector2(window.innerWidth, window.innerHeight)
+        },
+        rotation: {
+          value: this.PARAMS.rotation
+        },
+        lineWidth: {
+          value: this.PARAMS.lineWidth
+        },
+        repeat: {
+          value: this.PARAMS.repeat
+        },
+        timeMulti: {
+          value: this.PARAMS.timeMulti
+        },
+        noiseAtten: {
+          value: this.PARAMS.noiseAtten
+        }
+      }
+    });
+
+    this.planeGeo = new THREE.PlaneGeometry(3 * (window.innerWidth / window.innerHeight) - 0.2 / (window.innerWidth / window.innerHeight), 2.8, 1, 1);
+
+    this.plane = new THREE.Mesh(this.planeGeo, this.planeMat);
+    this.bgScene.add(this.plane);
+
+
+    this.box = new THREE.Mesh(new THREE.BoxBufferGeometry(1, 1, 0.2).translate(0, 0, -0.1), this.planeMat);
+    this.box.position.z = 1.2;
+    this.bgScene.add(this.box);
   }
 
   loadTestMesh() {
@@ -193,12 +291,18 @@ export default class WebGLView {
       window.innerWidth,
       window.innerHeight
     );
-    this.bgCamera = new THREE.PerspectiveCamera(
-      50,
-      window.innerWidth / window.innerHeight,
-      0.01,
-      100
-    );
+    // this.bgCamera = new THREE.PerspectiveCamera(
+    //   50,
+    //   window.innerWidth / window.innerHeight,
+    //   0.01,
+    //   100
+    // );
+
+    const frustumSize = 3;
+    const aspect = window.innerWidth / window.innerHeight;
+    this.bgCamera = new THREE.OrthographicCamera(frustumSize * aspect / - 2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, -1000, 1000);
+    this.bgCamera.position.set(0, 0, 2);
+
     this.controls = new OrbitControls(this.bgCamera, this.renderer.domElement);
 
     this.bgCamera.position.z = 3;
@@ -264,6 +368,21 @@ export default class WebGLView {
     }
 
     if (this.trackball) this.trackball.update();
+
+    if (this.plane) {
+      this.planeMat.uniforms.u_time.value = time;
+    }
+
+    if (this.box) {
+      this.mouseTarget.x -= 0.1 * (this.mouseTarget.x - this.mouse.x);
+      this.mouseTarget.y -= 0.1 * (this.mouseTarget.y - this.mouse.y);
+
+      this.box.rotation.x = this.mouseTarget.x;
+      this.box.rotation.y = this.mouseTarget.y;
+
+      // this.box.position.x += Math.sin(time) * 0.001;
+
+    }
   }
 
   draw() {
