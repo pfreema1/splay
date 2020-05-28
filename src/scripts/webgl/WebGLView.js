@@ -237,6 +237,7 @@ export default class WebGLView {
 
     this.box = new THREE.Mesh(new THREE.BoxBufferGeometry(1, 1, 0.2).translate(0, 0, -0.1), this.planeMat);
     this.box.position.z = 1.2;
+    this.box.position.x = 1;
     this.bgScene.add(this.box);
   }
 

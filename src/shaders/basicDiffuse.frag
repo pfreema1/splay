@@ -123,6 +123,13 @@ void main() {
   // vec2 newUV = gl_FragCoord.xy/resolution.xy;
   vec2 newUV = vPosition.xy;
 
+  // repeaters
+  // if(newUV.x < 0.2) {
+  //   newUV.x -= 0.1;
+  // } else if(newUV.x < 0.4) {
+  //   newUV.x += 0.1;
+  // }
+
   newUV = rotate(newUV, rotation + (u_time * 0.1));
 
   float noise = cnoise(vec3(newUV + u_time / 40.0 + vPosition.z, u_time * timeMulti));
