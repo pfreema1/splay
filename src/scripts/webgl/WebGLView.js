@@ -197,11 +197,25 @@ export default class WebGLView {
 
   async initStuff() {
 
+    /*
     let loader = new THREE.TextureLoader();
 
     loader.load('./dog.jpg', texture => {
       this.addElements(texture);
     });
+    */
+
+
+
+    setTimeout(() => {
+      let video = document.getElementById('video');
+      this.videoTexture = new THREE.VideoTexture(video);
+      this.videoTexture.minFilter = THREE.LinearFilter;
+      this.videoTexture.magFilter = THREE.LinearFilter;
+      this.videoTexture.format = THREE.RGBFormat;
+      this.videoTexture.needsUpdate = true;
+      this.addElements(this.videoTexture);
+    }, 1000);
 
   }
 
@@ -417,6 +431,10 @@ export default class WebGLView {
       // this.box.rotation.y = this.mouseTarget.y;
 
       // this.box.position.x += Math.sin(time) * 0.001;
+
+    }
+
+    if (this.elements) {
 
     }
   }
