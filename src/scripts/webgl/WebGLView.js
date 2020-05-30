@@ -1,10 +1,12 @@
+// https://tympanus.net/codrops/2020/01/07/playing-with-texture-projection-in-three-js/
+
 import * as THREE from 'three';
 import GLTFLoader from 'three-gltf-loader';
 import glslify from 'glslify';
 import Tweakpane from 'tweakpane';
 import OrbitControls from 'three-orbitcontrols';
 import TweenMax from 'TweenMax';
-import baseDiffuseFrag from '../../shaders/basicDiffuse.frag';
+import basicDiffuseFrag from '../../shaders/basicDiffuse.frag';
 import basicDiffuseVert from '../../shaders/basicDiffuse.vert';
 import MouseCanvas from '../MouseCanvas';
 import TextCanvas from '../TextCanvas';
@@ -14,6 +16,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { BloomPass } from 'three/examples/jsm/postprocessing/BloomPass.js';
 import { FilmPass } from 'three/examples/jsm/postprocessing/FilmPass.js';
 import { debounce } from '../utils/debounce';
+import ProjectedMaterial, { project } from '../ProjectedMaterial'
+import { random } from 'lodash';
 
 export default class WebGLView {
   constructor(app) {
@@ -191,54 +195,79 @@ export default class WebGLView {
     this.textCanvas = new TextCanvas(this);
   }
 
-  initStuff() {
-    this.planeMat = new THREE.ShaderMaterial({
-      extensions: {
-        derivatives: '#extension GL_OES_standard_derivatives : enable',
-      },
-      fragmentShader: glslify(baseDiffuseFrag),
-      vertexShader: glslify(basicDiffuseVert),
-      uniforms: {
-        u_time: {
-          value: 0.0
-        },
-        u_lightColor: {
-          value: new THREE.Vector3(0.0, 1.0, 1.0)
-        },
-        u_lightPos: {
-          value: new THREE.Vector3(-2.2, 2.0, 2.0)
-        },
-        resolution: {
-          value: new THREE.Vector2(window.innerWidth, window.innerHeight)
-        },
-        rotation: {
-          value: this.PARAMS.rotation
-        },
-        lineWidth: {
-          value: this.PARAMS.lineWidth
-        },
-        repeat: {
-          value: this.PARAMS.repeat
-        },
-        timeMulti: {
-          value: this.PARAMS.timeMulti
-        },
-        noiseAtten: {
-          value: this.PARAMS.noiseAtten
-        }
-      }
+  async initStuff() {
+
+    let loader = new THREE.TextureLoader();
+
+    loader.load('./dog.jpg', texture => {
+      this.addElements(texture);
     });
 
-    this.planeGeo = new THREE.PlaneGeometry(3 * (window.innerWidth / window.innerHeight) - 0.2 / (window.innerWidth / window.innerHeight), 2.8, 1, 1);
+  }
 
-    this.plane = new THREE.Mesh(this.planeGeo, this.planeMat);
-    this.bgScene.add(this.plane);
+  addElements(texture) {
+    this.elements = new THREE.Group()
+    const NUM_ELEMENTS = 50
+    for (let i = 0; i < NUM_ELEMENTS; i++) {
+      // const geometry = new THREE.IcosahedronGeometry(random(0.1, 0.5))
+      const geometry = new THREE.PlaneBufferGeometry(0.3, 0.3, 1, 1)
+      const material = new ProjectedMaterial({
+        // use the scene camera itself
+        camera: this.bgCamera,
+        texture: texture,
+        color: '#3149D5',
+        textureScale: 0.8,
+        transparent: true
+      });
+      const element = new THREE.Mesh(geometry, material);
+
+      // move the meshes any way you want!
+      // if (i < NUM_ELEMENTS * 0.3) {
+      element.position.x = random(-1, 1, true);
+      element.position.y = random(-2, 2, true);
+      element.position.z = random(1, 2); //random(-0.3, 0.3)
+      element.scale.multiplyScalar(1.4)
+      // } 
+      /*else {
+        element.position.x = random(-1, 1, true);
+        element.position.y = random(-2, 2, true);
+        element.position.z = random(-0.5, 0.5);
+      }*/
+      // element.rotation.x = random(0, Math.PI * 2)
+      // element.rotation.y = random(0, Math.PI * 2)
+      // element.rotation.z = random(0, Math.PI * 2)
+
+      // and when you're ready project the texture!
+      project(element)
+      this.elements.add(element)
+
+      const randomDur = random(1.0, 4.0);
+      TweenMax.to(element.position, randomDur, {
+        x: '+=' + random(-1.0, 1.0),
+        repeat: -1
+      });
+
+      TweenMax.to(element.material.uniforms.opacity, randomDur, {
+        value: 0,
+        repeat: -1,
+      });
+    }
+    this.bgScene.add(this.elements);
 
 
-    this.box = new THREE.Mesh(new THREE.BoxBufferGeometry(1, 1, 0.2).translate(0, 0, -0.1), this.planeMat);
-    this.box.position.z = 1.2;
-    this.box.position.x = 1;
-    this.bgScene.add(this.box);
+    // add bg
+    const geometry = new THREE.PlaneBufferGeometry(3, 3, 1, 1)
+    const material = new ProjectedMaterial({
+      // use the scene camera itself
+      camera: this.bgCamera,
+      texture: texture,
+      color: '#3149D5',
+      textureScale: 0.8,
+      transparent: true
+    });
+    const element = new THREE.Mesh(geometry, material);
+
+    this.bgScene.add(element);
   }
 
   loadTestMesh() {
@@ -313,9 +342,13 @@ export default class WebGLView {
   }
 
   initLights() {
-    this.pointLight = new THREE.PointLight(0xff0000, 1, 100);
+    this.pointLight = new THREE.PointLight(0xffffff, 3, 100);
     this.pointLight.position.set(0, 0, 50);
     this.bgScene.add(this.pointLight);
+
+    // this.pointLight2 = new THREE.PointLight(0xffffff, 1, 100);
+    // this.pointLight2.position.set(0, 0, -50);
+    // this.bgScene.add(this.pointLight2);
   }
 
   resize() {
@@ -378,8 +411,10 @@ export default class WebGLView {
       this.mouseTarget.x -= 0.1 * (this.mouseTarget.x - this.mouse.x);
       this.mouseTarget.y -= 0.1 * (this.mouseTarget.y - this.mouse.y);
 
-      this.box.rotation.x = this.mouseTarget.x;
-      this.box.rotation.y = this.mouseTarget.y;
+      this.box.rotation.y -= 0.003;
+
+      // this.box.rotation.x = this.mouseTarget.x;
+      // this.box.rotation.y = this.mouseTarget.y;
 
       // this.box.position.x += Math.sin(time) * 0.001;
 
